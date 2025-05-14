@@ -204,3 +204,83 @@
     (as-contract (stx-transfer? amount (as-contract tx-sender) tx-sender))
   )
 )
+
+;; Transfers tokens between users within the rollup
+(define-public (transfer-in-rollup
+    (from principal)
+    (to principal)
+    (amount uint)
+    (token-identifier uint)
+  )
+  (begin
+    (asserts! (is-valid-principal from) ERR_INVALID_INPUT)
+    (asserts! (is-valid-principal to) ERR_INVALID_INPUT)
+    (asserts! (is-valid-uint amount) ERR_INVALID_INPUT)
+    (asserts! (is-valid-uint token-identifier) ERR_INVALID_INPUT)
+    (let (
+        (sender-balance (default-to u0
+          (map-get? user-balances {
+            user: from,
+            token-identifier: token-identifier,
+          })
+        ))
+        (recipient-balance (default-to u0
+          (map-get? user-balances {
+            user: to,
+            token-identifier: token-identifier,
+          })
+        ))
+      )
+      (asserts! (>= sender-balance amount) ERR_INSUFFICIENT_FUNDS)
+      (map-set user-balances {
+        user: from,
+        token-identifier: token-identifier,
+      }
+        (- sender-balance amount)
+      )
+      (map-set user-balances {
+        user: to,
+        token-identifier: token-identifier,
+      }
+        (+ recipient-balance amount)
+      )
+    )
+    (ok true)
+  )
+)
+
+;; Resolves a challenge against a state commitment
+(define-public (resolve-challenge
+    (challenge-block uint)
+    (commitment-hash (buff 32))
+  )
+  (let (
+      (challenge (map-get? challenges {
+        challenge-block: challenge-block,
+        challenger: tx-sender,
+      }))
+      (commitment (map-get? state-commitments {
+        commitment-block: challenge-block,
+        commitment-hash: commitment-hash,
+      }))
+    )
+    (asserts! (is-valid-uint challenge-block) ERR_INVALID_INPUT)
+    (asserts! (is-valid-commitment-hash commitment-hash) ERR_INVALID_INPUT)
+    (asserts! (is-some challenge) ERR_INVALID_COMMITMENT)
+    (asserts! (is-some commitment) ERR_INVALID_COMMITMENT)
+    (ok true)
+  )
+)
+
+;; Gets the balance of a user for a specific token
+(define-read-only (get-user-balance
+    (user principal)
+    (token-identifier uint)
+  )
+  (default-to u0
+    (map-get? user-balances {
+      user: user,
+      token-identifier: token-identifier,
+    })
+  )
+)
