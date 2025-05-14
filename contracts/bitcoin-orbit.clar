@@ -131,3 +131,76 @@
     (ok true)
   )
 )
+
+;; Challenges an existing state commitment
+(define-public (challenge-commitment
+    (challenge-block uint)
+    (commitment-hash (buff 32))
+    (challenge-proof (buff 256))
+  )
+  (let (
+      (challenge-bond u500)
+      (existing-commitment (map-get? state-commitments {
+        commitment-block: challenge-block,
+        commitment-hash: commitment-hash,
+      }))
+    )
+    (asserts! (is-valid-uint challenge-block) ERR_INVALID_INPUT)
+    (asserts! (is-valid-commitment-hash commitment-hash) ERR_INVALID_INPUT)
+    (asserts! (is-some existing-commitment) ERR_INVALID_COMMITMENT)
+    (try! (stx-transfer? challenge-bond tx-sender (as-contract tx-sender)))
+    (map-set challenges {
+      challenge-block: challenge-block,
+      challenger: tx-sender,
+    } {
+      commitment-hash: commitment-hash,
+      challenge-bond: challenge-bond,
+    })
+    (ok true)
+  )
+)
+
+;; Deposits tokens into the rollup
+(define-public (deposit
+    (amount uint)
+    (token-identifier uint)
+  )
+  (begin
+    (asserts! (is-valid-uint amount) ERR_INVALID_INPUT)
+    (asserts! (is-valid-uint token-identifier) ERR_INVALID_INPUT)
+    (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))
+    (map-set user-balances {
+      user: tx-sender,
+      token-identifier: token-identifier,
+    }
+      amount
+    )
+    (ok true)
+  )
+)
+
+;; Withdraws tokens from the rollup
+(define-public (withdraw
+    (amount uint)
+    (token-identifier uint)
+    (merkle-proof (buff 256))
+  )
+  (let ((user-balance (default-to u0
+      (map-get? user-balances {
+        user: tx-sender,
+        token-identifier: token-identifier,
+      })
+    )))
+    (asserts! (is-valid-uint amount) ERR_INVALID_INPUT)
+    (asserts! (is-valid-uint token-identifier) ERR_INVALID_INPUT)
+    (asserts! (>= user-balance amount) ERR_INSUFFICIENT_FUNDS)
+    (asserts! (validate-merkle-proof merkle-proof) ERR_INVALID_PROOF)
+    (map-set user-balances {
+      user: tx-sender,
+      token-identifier: token-identifier,
+    }
+      (- user-balance amount)
+    )
+    (as-contract (stx-transfer? amount (as-contract tx-sender) tx-sender))
+  )
+)
